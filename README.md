@@ -3,6 +3,9 @@ backgroundblur
 
 Simple background blur for your webcam.
 
+This script will capture your webcams output, add a blur effect to the
+background and output the generated image to another (virtual) video device.
+
 
 ## Installation (venv)
 
