@@ -2,6 +2,7 @@
 
 import argparse
 import signal
+import time
 
 import cv2
 import mediapipe as mp
@@ -24,17 +25,23 @@ def process(image, selfie_segmentation):
     image.flags.writeable = False
     mask = selfie_segmentation.process(image).segmentation_mask
     image.flags.writeable = True
-    
+
     background = blur(image)
     #background = np.zeros(image.shape, dtype=np.uint8)
     #background[:] = (192, 192, 192)
-    
+
     mask = post_processing(mask)
     mask_inverted = 1 - mask
     for c in range(image.shape[2]):
         image[:,:,c] = image[:,:,c]*mask + background[:,:,c]*mask_inverted
 
     return cv2.flip(image, 1)
+
+def limit_frequency(f, period=1.):
+    time_before = time.time()
+    f()
+    while (time.time() - time_before) < period:
+        time.sleep(0.001)
 
 def run(input_device_name, output_device_name):
     global shutdown_requested
@@ -52,13 +59,17 @@ def run(input_device_name, output_device_name):
     target_height = int(input_device.get(cv2.CAP_PROP_FRAME_HEIGHT))
     output_device = pyfakewebcam.FakeWebcam(output_device_name, target_width, target_height)
 
+    def frame():
+        success, image = input_device.read()
+        if not success:
+            return
+        image = process(image, selfie_segmentation)
+
+        output_device.schedule_frame(image)
+
     with mp.solutions.selfie_segmentation.SelfieSegmentation(model_selection=1) as selfie_segmentation:
         while input_device.isOpened() and not shutdown_requested:
-            success, image = input_device.read()
-            if not success:
-                continue
-            image = process(image, selfie_segmentation)
-            output_device.schedule_frame(image)
+            limit_frequency(frame, 1/30.)
 
     print("Shutting down...")
 
